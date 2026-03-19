@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>医疗检查项目匹配游戏</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "Microsoft YaHei", sans-serif;
+        }
+
+        body {
+            background-color: #f5f5f5;
+            padding: 20px;
+        }
+
+        .game-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 30px;
+        }
+
+        /* 左侧游戏网格样式 */
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(3, 220px);
+            grid-template-rows: repeat(3, 150px);
+            gap: 10px;
+        }
+
+        .grid-cell {
+            background-color: #fff;
+            border: 2px solid #409eff;
+            border-radius: 8px;
+            padding: 10px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            font-size: 14px;
+            color: #333;
+            position: relative;
+            cursor: pointer;
+        }
+
+        .grid-cell.correct {
+            background-color: #f0f9ff;
+            border-color: #67c23a;
+        }
+
+        .grid-cell .dragged-image {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 6px;
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        .grid-cell.has-image .cell-text {
+            display: none;
+        }
+
+        .grid-cell.has-image .dragged-image {
+            display: block;
+        }
+
+        /* 右侧图片库样式 */
+        .image-library {
+            display: grid;
+            grid-template-columns: repeat(3, 120px);
+            grid-template-rows: repeat(3, 100px);
+            gap: 10px;
+        }
+
+        .draggable-image {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 8px;
+            cursor: grab;
+            border: 2px solid #e6a23c;
+            transition: transform 0.2s;
+        }
+
+        .draggable-image:active {
+            cursor: grabbing;
+            transform: scale(0.95);
+        }
+
+        /* 提示和重置按钮样式 */
+        .game-info {
+            max-width: 1200px;
+            margin: 20px auto;
+            text-align: center;
+        }
+
+        #message {
+            font-size: 18px;
+            color: #409eff;
+            margin-bottom: 15px;
+            height: 24px;
+        }
+
+        #reset-btn {
+            padding: 10px 20px;
+            background-color: #409eff;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        #reset-btn:hover {
+            background-color: #337ecc;
+        }
+
+        /* 响应式适配 */
+        @media (max-width: 900px) {
+            .game-container {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .grid-container {
+                grid-template-columns: repeat(3, 180px);
+                grid-template-rows: repeat(3, 130px);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-info">
+        <div id="message">请将右侧图片拖拽到左侧对应名称的格子中</div>
+        <button id="reset-btn">重置游戏</button>
+    </div>
+
+    <div class="game-container">
+        <!-- 左侧3x3网格区域 -->
+        <div class="grid-container" id="gridContainer"></div>
+        
+        <!-- 右侧图片库区域 -->
+        <div class="image-library" id="imageLibrary"></div>
+    </div>
+
+    <script>
+        // 1. 定义检查项目数据（名称 + 图片标识 + 专属图片URL）
+        const checkItems = [
+            { 
+                name: "耳内镜检查", 
+                imgKey: "耳内镜检查",
+                imgUrl: "https://p3-flow-imagex-sign.byteimg.com/tos-cn-i-a9rns2rl98/7b552c7922e64109a11557473adbeb01.jpg~tplv-a9rns2rl98-image.png?lk3s=8e244e95&rcl=202603051136310B4D0FE75C3595870A38&rrcfp=dafada99&x-expires=2088905791&x-signature=PZEMZ4dd13495BCke7eYw%2BkM4tA%3D"
+            },
+            { 
+                name: "裂隙灯显微镜眼科检查", 
+                imgKey: "裂隙灯显微镜眼科检查",
+                imgUrl: "https://p9-flow-imagex-sign.byteimg.com/tos-cn-i-a9rns2rl98/23bcbbb4503f4ea9bdbecbb40bd653c4.jpg~tplv-a9rns2rl98-image.png?lk3s=8e244e95&rcl=202603051136310B4D0FE75C3595870A38&rrcfp=dafada99&x-expires=2088905791&x-signature=7eVlPZsUE2%2FFL3ofL1g91hM82rM%3D"
+            },
+            { 
+                name: "磁共振成像（MRI）检查", 
+                imgKey: "磁共振成像（MRI）检查",
+                imgUrl: "https://p3-flow-imagex-sign.byteimg.com/tos-cn-i-a9rns2rl98/3b50c563a2a74cdc8d26585d4a60c282.png~tplv-a9rns2rl98-image.png?lk3s=8e244e95&rcl=202603051136310B4D0FE75C3595870A38&rrcfp=dafada99&x-expires=2088905791&x-signature=%2FlqZLRuTPt%2B2MJPQf14ywcN2bME%3D"
+            },
+            { 
+                name: "双能X线骨密度查检（DEXA）", 
+                imgKey: "双能X线骨密度查检（DEXA）",
+                imgUrl: "https://p11-flow-imagex-sign.byteimg.com/tos-cn-i-a9rns2rl98/5be6caf7e1194ce0beb9654fc43e88d7.jpg~tplv-a9rns2rl98-image.png?lk3s=8e244e95&rcl=202603051136310B4D0FE75C3595870A38&rrcfp=dafada99&x-expires=2088905791&x-signature=hGc37TbubxwPO1TlY8ljG%2Fv0PPw%3D"
+            },
+            { 
+                name: "腹部超声检查（B超查检）", 
+                imgKey: "腹部超声检查（B超查检）",
+                imgUrl:"https://p9-flow-imagex-sign.byteimg.com/tos-cn-i-a9rns2rl98/1f2bbf8561b84c4bbe11009cd7fc9c45.jpg~tplv-a9rns2rl98-image.png?lk3s=8e244e95&rcl=202603051136310B4D0FE75C3595870A38&rrcfp=dafada99&x-expires=2088905791&x-signature=KSHYP55Xih10MejgnTMhlHk%2BD%2BM%3D"
+            },
+            { 
+                name: "指夹式血氧仪血氧饱和度检查", 
+                imgKey: "指夹式血氧仪血氧饱和度检查",
+                imgUrl: "https://p26-flow-imagex-sign.byteimg.com/tos-cn-i-a9rns2rl98/ce4c93ca42df478fbd0ef9a0b0e75f28.webp~tplv-a9rns2rl98-image.png?lk3s=8e244e95&rcl=202603051136310B4D0FE75C3595870A38&rrcfp=dafada99&x-expires=2088905791&x-signature=CrOP5HLz4G4IBhjn2nb3vepgHjI%3D"
+            },
+            { 
+                name: "血糖测量", 
+                imgKey: "血糖测量",
+                imgUrl:  "https://p3-flow-imagex-sign.byteimg.com/tos-cn-i-a9rns2rl98/894af5e2a1994bd4874572983ef2405b.jpg~tplv-a9rns2rl98-image.png?lk3s=8e244e95&rcl=202603051136310B4D0FE75C3595870A38&rrcfp=dafada99&x-expires=2088905791&x-signature=b43NyERlBelD0%2Fm3NMbE1WJqS9Q%3D"
+            },
+            { 
+                name: "血压测量", 
+                imgKey: "血压测量",
+                imgUrl: "https://p9-flow-imagex-sign.byteimg.com/tos-cn-i-a9rns2rl98/bd5609f07fcb40d7be996982254589d7.png~tplv-a9rns2rl98-image.png?lk3s=8e244e95&rcl=202603051136310B4D0FE75C3595870A38&rrcfp=dafada99&x-expires=2088905791&x-signature=HPVTr8juR4TD2q3YsEG9R1byOwY%3D"
+            },
+            { 
+                name: "体温测量", 
+                imgKey: "体温测量",
+                imgUrl: "https://p26-flow-imagex-sign.byteimg.com/tos-cn-i-a9rns2rl98/4d4f5da9b8ff4b1f9e54a5ff1ff1f948.webp~tplv-a9rns2rl98-image.png?lk3s=8e244e95&rcl=202603051136310B4D0FE75C3595870A38&rrcfp=dafada99&x-expires=2088905791&x-signature=ocXztYWgcUFXsYXU9bAiLEmXwvQ%3D"
+            }
+        ];
+
+        // 2. 页面加载完成后初始化游戏
+        document.addEventListener('DOMContentLoaded', function() {
+            initGame();
+            
+            // 绑定重置按钮事件
+            document.getElementById('reset-btn').addEventListener('click', initGame);
+        });
+
+        // 3. 初始化游戏核心函数
+        function initGame() {
+            const gridContainer = document.getElementById('gridContainer');
+            const imageLibrary = document.getElementById('imageLibrary');
+            const message = document.getElementById('message');
+            
+            // 重置状态
+            gridContainer
+.innerHTML = '';
+            imageLibrary
+.innerHTML = '';
+            message
+.textContent = '请将右侧图片拖拽到左侧对应名称的格子中';
+            message
+.style.color = '#409eff';
+
+            // 3.1 随机打乱检查项目顺序
+            const shuffledItems = [...checkItems].sort(() => Math.random() - 0.5);
+            
+            // 3.2 创建左侧网格单元格
+            shuffledItems
+.forEach(item => {
+                const cell = document.createElement('div');
+                cell
+.className = 'grid-cell';
+                cell
+.dataset.correctKey = item.imgKey; // 存储正确的图片标识
+                
+                // 单元格文字
+                const cellText = document.createElement('div');
+                cellText
+.className = 'cell-text';
+                cellText
+.textContent = item.name;
+                
+                // 拖拽后的图片容器
+                const imgContainer = document.createElement('img');
+                imgContainer
+.className = 'dragged-image';
+                imgContainer
+.dataset.droppedKey = ''; // 存储已拖拽的图片标识
+                
+                cell
+.appendChild(cellText);
+                cell
+.appendChild(imgContainer);
+                gridContainer
+.appendChild(cell);
+
+                // 绑定拖放事件（允许放置）
+                cell
+.addEventListener('dragover', allowDrop);
+                cell
+.addEventListener('drop', drop);
+            });
+
+            // 3.3 创建右侧可拖拽图片（使用你提供的专属图片URL）
+            const imageItems = [...checkItems].sort(() => Math.random() - 0.5);
+            imageItems
+.forEach(item => {
+                const img = document.createElement('img');
+                img
+.className = 'draggable-image';
+                // 使用专属图片URL
+                img
+.src = item.imgUrl;
+                img
+.alt = item.name;
+                img
+.dataset.imgKey = item.imgKey; // 存储图片标识
+                
+                // 绑定拖拽开始事件
+                img
+.addEventListener('dragstart', drag);
+                
+                imageLibrary
+.appendChild(img);
+            });
+        }
+
+        // 4. 拖拽相关核心函数
+        // 允许放置（阻止默认行为）
+        function allowDrop(ev) {
+            ev
+.preventDefault();
+        }
+
+        // 拖拽开始
+        function drag(ev) {
+            // 传递图片标识
+            ev
+.dataTransfer.setData("imgKey", ev.target.dataset.imgKey);
+            // 传递图片URL
+            ev
+.dataTransfer.setData("imgSrc", ev.target.src);
+        }
+
+        // 放置图片
+        function drop(ev) {
+            ev
+.preventDefault();
+            
+            // 获取拖拽的图片信息
+            const imgKey = ev.dataTransfer.getData("imgKey");
+            const imgSrc = ev.dataTransfer.getData("imgSrc");
+            
+            // 获取目标单元格
+            const targetCell = ev.target.closest('.grid-cell');
+            if (!targetCell) return;
+
+            // 更新单元格内容
+            const imgElement = targetCell.querySelector('.dragged-image');
+            imgElement
+.src = imgSrc;
+            imgElement
+.dataset.droppedKey = imgKey;
+            targetCell
+.classList.add('has-image');
+
+            // 验证是否匹配
+            const correctKey = targetCell.dataset.correctKey;
+            if (imgKey === correctKey) {
+                targetCell
+.classList.add('correct');
+            } else {
+                targetCell
+.classList.remove('correct');
+            }
+
+            // 检查是否全部匹配正确
+            checkAllCorrect();
+        }
+
+        // 5. 检查是否所有格子都匹配正确
+        function checkAllCorrect() {
+            const allCells = document.querySelectorAll('.grid-cell');
+            const message = document.getElementById('message');
+            
+            let allCorrect = true;
+            let allFilled = true;
+
+            allCells
+.forEach(cell => {
+                const hasImage = cell.classList.contains('has-image');
+                const isCorrect = cell.classList.contains('correct');
+                
+                if (!hasImage) allFilled = false;
+                if (hasImage && !isCorrect) allCorrect = false;
+            });
+
+            // 更新提示信息
+            if (allFilled && allCorrect) {
+                message
+.textContent = '恭喜！所有匹配都正确，你太棒了！';
+                message
+.style.color = '#67c23a';
+            } else if (allFilled && !allCorrect) {
+                message
+.textContent = '还有错误的匹配哦，再检查一下吧！';
+                message
+.style.color = '#f56c6c';
+            }
+        }
+    </script>
+</body>
+</html>
